@@ -67,7 +67,7 @@ const Index = () => {
     }
 
     const incidents: Incident[] = (data ?? []).map((row) => ({
-      id: row.id,
+      id: row.url,  // url is now the primary key
       title: row.title,
       description: row.description,
       url: row.url,

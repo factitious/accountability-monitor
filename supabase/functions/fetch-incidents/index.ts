@@ -159,8 +159,6 @@ function parseGdeltDate(value: unknown): Date {
   return isNaN(date.getTime()) ? new Date() : date;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
 
 async function fetchFromNewsAPI(baseUrl: string): Promise<Incident[]> {
@@ -171,59 +169,48 @@ async function fetchFromNewsAPI(baseUrl: string): Promise<Incident[]> {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const fromDate = thirtyDaysAgo.toISOString().split('T')[0];
 
-  const incidents: Incident[] = [];
-  for (const q of NEWSAPI_QUERIES) {
-    try {
-      const params = new URLSearchParams({ q, language: 'en', sortBy: 'publishedAt', apiKey, pageSize: '50', from: fromDate });
-      const res = await fetch(`https://newsapi.org/v2/everything?${params}`);
-      const data = await res.json();
-      for (const a of data.articles ?? []) {
-        const entities = extractEntities(a.title || '', a.description || '');
-        incidents.push({
-          id: `newsapi-${btoa(a.url).slice(0, 16)}`,
-          title: a.title || '',
-          description: a.description || null,
-          url: a.url,
-          date: new Date(a.publishedAt),
-          sourceName: a.source?.name || 'Unknown',
-          dataSource: 'NewsAPI',
-          category: inferCategory(a.title || '', a.description || ''),
-          ...entities,
-        });
-      }
-    } catch (err) { console.error('NewsAPI query failed:', q, err); }
-  }
-  return incidents;
+  const results = await Promise.allSettled(NEWSAPI_QUERIES.map(async (q) => {
+    const params = new URLSearchParams({ q, language: 'en', sortBy: 'publishedAt', apiKey, pageSize: '50', from: fromDate });
+    const res = await fetch(`https://newsapi.org/v2/everything?${params}`);
+    const data = await res.json();
+    return (data.articles ?? []).map((a: any) => ({
+      id: `newsapi-${btoa(unescape(encodeURIComponent(a.url))).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}`,
+      title: a.title || '',
+      description: a.description || null,
+      url: a.url,
+      date: new Date(a.publishedAt),
+      sourceName: a.source?.name || 'Unknown',
+      dataSource: 'NewsAPI' as DataSource,
+      category: inferCategory(a.title || '', a.description || ''),
+      ...extractEntities(a.title || '', a.description || ''),
+    }));
+  }));
+
+  return results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
 }
 
 async function fetchFromSerpAPI(): Promise<Incident[]> {
   const apiKey = Deno.env.get('SERPAPI_KEY');
   if (!apiKey) { console.warn('SERPAPI_KEY not set, skipping'); return []; }
 
-  const incidents: Incident[] = [];
-  for (const q of SERPAPI_QUERIES) {
-    try {
-      const params = new URLSearchParams({ engine: 'google_news', q, api_key: apiKey, gl: 'us', hl: 'en' });
-      const res = await fetch(`https://serpapi.com/search?${params}`);
-      const data = await res.json();
-      const results = data?.news_results || data?.organic_results || [];
-      for (const a of results) {
-        const entities = extractEntities(a.title || '', a.snippet || '');
-        incidents.push({
-          id: `serpapi-${btoa(a.link || a.url || q).slice(0, 16)}`,
-          title: a.title || '',
-          description: a.snippet || null,
-          url: a.link || a.url || '',
-          date: a.date ? new Date(a.date) : new Date(),
-          sourceName: a.source?.name || a.source || 'Google News',
-          dataSource: 'SerpAPI',
-          category: inferCategory(a.title || '', a.snippet || ''),
-          ...entities,
-        });
-      }
-    } catch (err) { console.error('SerpAPI query failed:', q, err); }
-  }
-  return incidents;
+  const results = await Promise.allSettled(SERPAPI_QUERIES.map(async (q) => {
+    const params = new URLSearchParams({ engine: 'google_news', q, api_key: apiKey, gl: 'us', hl: 'en' });
+    const res = await fetch(`https://serpapi.com/search?${params}`);
+    const data = await res.json();
+    return (data?.news_results || data?.organic_results || []).map((a: any) => ({
+      id: `serpapi-${btoa(unescape(encodeURIComponent(a.link || a.url || q))).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}`,
+      title: a.title || '',
+      description: a.snippet || null,
+      url: a.link || a.url || '',
+      date: a.date ? new Date(a.date) : new Date(),
+      sourceName: a.source?.name || a.source || 'Google News',
+      dataSource: 'SerpAPI' as DataSource,
+      category: inferCategory(a.title || '', a.snippet || ''),
+      ...extractEntities(a.title || '', a.snippet || ''),
+    }));
+  }));
+
+  return results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
 }
 
 async function fetchFromGDELT(): Promise<Incident[]> {
@@ -231,30 +218,25 @@ async function fetchFromGDELT(): Promise<Incident[]> {
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
   const startdatetime = sixtyDaysAgo.toISOString().replace(/[-:T]/g, '').slice(0, 14);
 
-  const incidents: Incident[] = [];
-  for (const q of GDELT_QUERIES) {
-    try {
-      await sleep(6000); // GDELT rate limit
-      const params = new URLSearchParams({ query: q, mode: 'artlist', maxrecords: '50', format: 'json', sourcelang: 'English', sourcecountry: 'US', startdatetime });
-      const res = await fetch(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`);
-      const data = await res.json();
-      for (const a of data?.articles ?? []) {
-        const entities = extractEntities(a.title || '', null);
-        incidents.push({
-          id: `gdelt-${btoa(a.url || a.title || q).slice(0, 16)}`,
-          title: a.title || '',
-          description: null,
-          url: a.url,
-          date: parseGdeltDate(a.seendate),
-          sourceName: a.domain || 'GDELT',
-          dataSource: 'GDELT',
-          category: inferCategory(a.title || '', null),
-          ...entities,
-        });
-      }
-    } catch (err) { console.error('GDELT query failed:', q, err); }
-  }
-  return incidents;
+  const results = await Promise.allSettled(GDELT_QUERIES.map(async (q) => {
+    const params = new URLSearchParams({ query: q, mode: 'artlist', maxrecords: '50', format: 'json', sourcelang: 'English', sourcecountry: 'US', startdatetime });
+    const res = await fetch(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`);
+    if (res.status === 429) { console.warn('GDELT rate limited'); return []; }
+    const data = await res.json();
+    return (data?.articles ?? []).map((a: any) => ({
+      id: `gdelt-${btoa(unescape(encodeURIComponent(a.url || a.title || q))).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}`,
+      title: a.title || '',
+      description: null,
+      url: a.url,
+      date: parseGdeltDate(a.seendate),
+      sourceName: a.domain || 'GDELT',
+      dataSource: 'GDELT' as DataSource,
+      category: inferCategory(a.title || '', null),
+      ...extractEntities(a.title || '', null),
+    }));
+  }));
+
+  return results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -269,7 +251,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const db = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch from all 3 sources in parallel (GDELT is sequential internally due to rate limits)
+    // Fetch from all 3 sources in parallel — each source also fetches its queries in parallel
     const [newsapiResults, serpapiResults, gdeltResults] = await Promise.all([
       fetchFromNewsAPI(supabaseUrl),
       fetchFromSerpAPI(),
@@ -280,7 +262,6 @@ Deno.serve(async (req) => {
 
     // Upsert — on conflict (same URL) update the record with fresher data
     const rows = all.map((inc) => ({
-      id: inc.id,
       title: inc.title,
       description: inc.description,
       url: inc.url,
@@ -294,15 +275,28 @@ Deno.serve(async (req) => {
       fetched_at: new Date().toISOString(),
     }));
 
-    const { error } = await db.from('incidents').upsert(rows, { onConflict: 'url' });
-    if (error) throw error;
+    // Deduplicate by URL before upserting (prevents PK conflicts from hash collisions)
+    const seenUrls = new Map<string, typeof rows[0]>();
+    for (const row of rows) {
+      const key = row.url.toLowerCase().replace(/\/+$/, '');
+      if (!seenUrls.has(key)) seenUrls.set(key, row);
+    }
+    const dedupedRows = Array.from(seenUrls.values());
 
-    return new Response(JSON.stringify({ inserted: rows.length }), {
+    const { error: upsertError } = await db.from('incidents').upsert(dedupedRows, { onConflict: 'url', ignoreDuplicates: false });
+    if (upsertError) {
+      console.error('Upsert failed:', JSON.stringify(upsertError));
+      throw new Error(`DB upsert failed: ${upsertError.message}`);
+    }
+
+    return new Response(JSON.stringify({ inserted: dedupedRows.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    console.error('fetch-incidents failed:', err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }), {
+    const message = err instanceof Error ? err.message : JSON.stringify(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error('fetch-incidents failed:', message, stack);
+    return new Response(JSON.stringify({ error: message, stack }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
