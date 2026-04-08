@@ -1,24 +1,20 @@
 import { Incident } from '@/types/incident';
 import { SERPAPI_QUERIES, inferCategory } from '@/utils/queries';
 import { extractEntities } from '@/utils/entities';
+import { supabase } from '@/integrations/supabase/client';
 
 export async function fetchSerpAPI(apiKey: string): Promise<Incident[]> {
   const allIncidents: Incident[] = [];
 
   for (const q of SERPAPI_QUERIES) {
-    const params = new URLSearchParams({
-      engine: 'google_news',
-      q,
-      api_key: apiKey,
-      gl: 'us',
-      hl: 'en',
+    const { data, error } = await supabase.functions.invoke('serpapi-proxy', {
+      body: { apiKey, query: q },
     });
 
-    const res = await fetch(`https://serpapi.com/search?${params}`);
-    if (!res.ok) throw new Error(`SerpAPI: ${res.status} ${res.statusText}`);
-    const data = await res.json();
+    if (error) throw new Error(`SerpAPI proxy: ${error.message}`);
+    if (data?.error) throw new Error(`SerpAPI: ${data.error}`);
 
-    const results = data.news_results || data.organic_results || [];
+    const results = data?.news_results || data?.organic_results || [];
     for (const a of results) {
       const entities = extractEntities(a.title || '', a.snippet || '');
       allIncidents.push({
