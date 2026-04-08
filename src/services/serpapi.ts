@@ -3,12 +3,12 @@ import { SERPAPI_QUERIES, inferCategory } from '@/utils/queries';
 import { extractEntities } from '@/utils/entities';
 import { supabase } from '@/integrations/supabase/client';
 
-export async function fetchSerpAPI(apiKey: string): Promise<Incident[]> {
+export async function fetchSerpAPI(): Promise<Incident[]> {
   const allIncidents: Incident[] = [];
 
   for (const q of SERPAPI_QUERIES) {
     const { data, error } = await supabase.functions.invoke('serpapi-proxy', {
-      body: { apiKey, query: q },
+      body: { query: q },
     });
 
     if (error) throw new Error(`SerpAPI proxy: ${error.message}`);

@@ -3,10 +3,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { SettingsModal } from '@/components/SettingsModal';
 import { FiltersBar } from '@/components/FiltersBar';
 import { IncidentCard } from '@/components/IncidentCard';
-import { fetchNewsAPI } from '@/services/newsapi';
-import { fetchGDELT } from '@/services/gdelt';
-import { fetchSerpAPI } from '@/services/serpapi';
-import { deduplicateIncidents } from '@/utils/dedup';
+import { supabase } from '@/integrations/supabase/client';
 import { Incident, FetchState, Category, DataSource } from '@/types/incident';
 
 const Index = () => {
@@ -29,60 +26,62 @@ const Index = () => {
     return () => clearTimeout(t);
   }, [searchText]);
 
-  // Check if keys exist on mount
+  // Fetch on mount
   useEffect(() => {
-    const hasKeys = localStorage.getItem('newsapi_key') || localStorage.getItem('serpapi_key');
-    if (!hasKeys) {
-      setSettingsOpen(true);
-    } else {
-      fetchAll();
-    }
+    fetchAll();
   }, []);
 
+  // 1. Read current incidents from DB (fast)
+  // 2. Trigger background fetch to refresh DB
+  // 3. Re-read DB when fetch completes
   const fetchAll = useCallback(async () => {
-    const newsapiKey = localStorage.getItem('newsapi_key');
-    const serpapiKey = localStorage.getItem('serpapi_key');
     const newErrors: Record<string, string> = {};
-    const allResults: Incident[] = [];
 
-    // Fetch all sources in parallel
-    const promises: Promise<void>[] = [];
+    // Read from DB immediately so the page isn't blank
+    setFetchState((s) => ({ ...s, newsapi: 'loading', gdelt: 'loading', serpapi: 'loading' }));
+    await loadFromDB();
 
-    if (newsapiKey) {
-      setFetchState((s) => ({ ...s, newsapi: 'loading' }));
-      promises.push(
-        fetchNewsAPI(newsapiKey)
-          .then((r) => { allResults.push(...r); setFetchState((s) => ({ ...s, newsapi: 'success' })); })
-          .catch((e) => { newErrors.NewsAPI = e.message; setFetchState((s) => ({ ...s, newsapi: 'error' })); })
-      );
-    } else {
-      newErrors.NewsAPI = 'API key not configured';
-      setFetchState((s) => ({ ...s, newsapi: 'error' }));
+    // Trigger the background fetch-incidents Edge Function
+    const { error } = await supabase.functions.invoke('fetch-incidents');
+    if (error) {
+      newErrors.fetch = error.message;
+      setFetchState((s) => ({ ...s, newsapi: 'error', gdelt: 'error', serpapi: 'error', errors: newErrors }));
+      return;
     }
 
-    setFetchState((s) => ({ ...s, gdelt: 'loading' }));
-    promises.push(
-      fetchGDELT()
-        .then((r) => { allResults.push(...r); setFetchState((s) => ({ ...s, gdelt: 'success' })); })
-        .catch((e) => { newErrors.GDELT = e.message; setFetchState((s) => ({ ...s, gdelt: 'error' })); })
-    );
-
-    if (serpapiKey) {
-      setFetchState((s) => ({ ...s, serpapi: 'loading' }));
-      promises.push(
-        fetchSerpAPI(serpapiKey)
-          .then((r) => { allResults.push(...r); setFetchState((s) => ({ ...s, serpapi: 'success' })); })
-          .catch((e) => { newErrors.SerpAPI = e.message; setFetchState((s) => ({ ...s, serpapi: 'error' })); })
-      );
-    } else {
-      newErrors.SerpAPI = 'API key not configured';
-      setFetchState((s) => ({ ...s, serpapi: 'error' }));
-    }
-
-    await Promise.allSettled(promises);
-    setFetchState((s) => ({ ...s, errors: newErrors }));
-    setIncidents(deduplicateIncidents(allResults));
+    // Re-read DB now that fresh data has been upserted
+    await loadFromDB();
+    setFetchState((s) => ({ ...s, newsapi: 'success', gdelt: 'success', serpapi: 'success', errors: {} }));
   }, []);
+
+  const loadFromDB = async () => {
+    const { data, error } = await supabase
+      .from('incidents')
+      .select('*')
+      .order('date', { ascending: false })
+      .limit(500);
+
+    if (error) {
+      console.error('DB read failed:', error);
+      return;
+    }
+
+    const incidents: Incident[] = (data ?? []).map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      url: row.url,
+      date: new Date(row.date),
+      sourceName: row.source_name,
+      dataSource: row.data_source as DataSource,
+      category: row.category as Category,
+      perpetratorName: row.perpetrator_name,
+      institutionName: row.institution_name,
+      perpetratorRole: row.perpetrator_role,
+    }));
+
+    setIncidents(incidents);
+  };
 
   const isRefreshing = fetchState.newsapi === 'loading' || fetchState.gdelt === 'loading' || fetchState.serpapi === 'loading';
 

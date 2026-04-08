@@ -7,18 +7,22 @@ export const SEARCH_QUERIES = [
   '"hospital" "sexual abuse" "accused" OR "charged"',
 ];
 
+// NewsAPI /v2/everything has no country param — "United States" in the query is the best filter available.
+// The proxy already sets language=en.
 export const NEWSAPI_QUERIES = [
+  'teacher sexual abuse accused lawsuit "United States"',
+  'doctor sexual abuse accused charged "United States"',
+  'priest OR pastor OR rabbi sexual abuse accused "United States"',
+];
+
+// SerpAPI proxy already sets gl=us (country) and hl=en (language), so no need to repeat in the query.
+export const SERPAPI_QUERIES = [
   'teacher sexual abuse accused lawsuit',
   'doctor sexual abuse accused charged',
-  'priest OR pastor OR rabbi sexual abuse accused',
+  'priest OR pastor sexual abuse accused',
 ];
 
-export const SERPAPI_QUERIES = [
-  'teacher sexual abuse accused lawsuit United States',
-  'doctor sexual abuse accused charged United States',
-  'priest OR pastor sexual abuse accused United States',
-];
-
+// GDELT proxy already sets sourcecountry=US and sourcelang=English, so no need to repeat in the query.
 export const GDELT_QUERIES = [
   'teacher sexual abuse accused lawsuit',
   'doctor sexual abuse accused',

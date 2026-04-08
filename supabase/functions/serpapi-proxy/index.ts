@@ -9,10 +9,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { apiKey, query } = await req.json();
+    const { query } = await req.json();
 
-    if (!apiKey || !query) {
-      return new Response(JSON.stringify({ error: 'apiKey and query are required' }), {
+    const apiKey = Deno.env.get('SERPAPI_KEY');
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'SERPAPI_KEY secret is not set' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!query) {
+      return new Response(JSON.stringify({ error: 'query is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

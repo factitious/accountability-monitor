@@ -3,7 +3,7 @@ import { NEWSAPI_QUERIES, inferCategory } from '@/utils/queries';
 import { extractEntities } from '@/utils/entities';
 import { supabase } from '@/integrations/supabase/client';
 
-export async function fetchNewsAPI(apiKey: string): Promise<Incident[]> {
+export async function fetchNewsAPI(): Promise<Incident[]> {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const fromDate = thirtyDaysAgo.toISOString().split('T')[0];
@@ -12,7 +12,7 @@ export async function fetchNewsAPI(apiKey: string): Promise<Incident[]> {
 
   for (const q of NEWSAPI_QUERIES) {
     const { data, error } = await supabase.functions.invoke('newsapi-proxy', {
-      body: { apiKey, query: q, from: fromDate, pageSize: 50 },
+      body: { query: q, from: fromDate, pageSize: 50 },
     });
 
     if (error) throw new Error(`NewsAPI proxy: ${error.message}`);
