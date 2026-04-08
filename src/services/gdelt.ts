@@ -10,7 +10,9 @@ export async function fetchGDELT(): Promise<Incident[]> {
 
   const allIncidents: Incident[] = [];
 
-  for (const q of GDELT_QUERIES) {
+  for (let i = 0; i < GDELT_QUERIES.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 6000));
+    const q = GDELT_QUERIES[i];
     try {
       const { data, error } = await supabase.functions.invoke('gdelt-proxy', {
         body: {
