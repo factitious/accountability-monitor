@@ -1,6 +1,7 @@
 import { Incident } from '@/types/incident';
 import { NEWSAPI_QUERIES, inferCategory } from '@/utils/queries';
 import { extractEntities } from '@/utils/entities';
+import { supabase } from '@/integrations/supabase/client';
 
 export async function fetchNewsAPI(apiKey: string): Promise<Incident[]> {
   const sixtyDaysAgo = new Date();
@@ -10,20 +11,14 @@ export async function fetchNewsAPI(apiKey: string): Promise<Incident[]> {
   const allIncidents: Incident[] = [];
 
   for (const q of NEWSAPI_QUERIES) {
-    const params = new URLSearchParams({
-      q,
-      language: 'en',
-      from: fromDate,
-      sortBy: 'publishedAt',
-      apiKey,
-      pageSize: '50',
+    const { data, error } = await supabase.functions.invoke('newsapi-proxy', {
+      body: { apiKey, query: q, from: fromDate, pageSize: 50 },
     });
 
-    const res = await fetch(`https://newsapi.org/v2/everything?${params}`);
-    if (!res.ok) throw new Error(`NewsAPI: ${res.status} ${res.statusText}`);
-    const data = await res.json();
+    if (error) throw new Error(`NewsAPI proxy: ${error.message}`);
+    if (data?.error) throw new Error(`NewsAPI: ${data.error}`);
 
-    if (data.articles) {
+    if (data?.articles) {
       for (const a of data.articles) {
         const entities = extractEntities(a.title || '', a.description || '');
         allIncidents.push({
