@@ -13,6 +13,9 @@ export interface Incident {
   perpetratorName: string | null;
   institutionName: string | null;
   perpetratorRole: string | null;
+  summary: string | null;
+  location: string | null;
+  aiEnriched: boolean;
 }
 
 export type SourceStatus = 'idle' | 'loading' | 'success' | 'error';

@@ -78,6 +78,9 @@ const Index = () => {
       perpetratorName: row.perpetrator_name,
       institutionName: row.institution_name,
       perpetratorRole: row.perpetrator_role,
+      summary: row.summary ?? null,
+      location: row.location ?? null,
+      aiEnriched: row.ai_enriched ?? false,
     }));
 
     setIncidents(incidents);
