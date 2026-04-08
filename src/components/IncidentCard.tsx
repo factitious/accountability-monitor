@@ -44,7 +44,7 @@ export function IncidentCard({ incident }: { incident: Incident }) {
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{incident.sourceName}</span>
           <span>·</span>
-          <span>{formatDistanceToNow(incident.date, { addSuffix: true })}</span>
+          <span>{incident.date instanceof Date && !isNaN(incident.date.getTime()) ? formatDistanceToNow(incident.date, { addSuffix: true }) : 'Unknown date'}</span>
         </div>
 
         {incident.description && (
