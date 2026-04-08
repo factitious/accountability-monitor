@@ -29,7 +29,7 @@ export async function fetchGDELT(): Promise<Incident[]> {
           title: a.title || '',
           description: null,
           url: a.url,
-          date: a.seendate ? new Date(a.seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6Z')) : new Date(),
+          date: (() => { try { const d = a.seendate ? new Date(a.seendate.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6Z')) : new Date(); return isNaN(d.getTime()) ? new Date() : d; } catch { return new Date(); } })(),
           sourceName: a.domain || 'GDELT',
           dataSource: 'GDELT',
           category: inferCategory(a.title || '', ''),
