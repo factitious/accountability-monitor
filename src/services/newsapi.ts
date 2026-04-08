@@ -4,8 +4,8 @@ import { extractEntities } from '@/utils/entities';
 import { supabase } from '@/integrations/supabase/client';
 
 export async function fetchNewsAPI(apiKey: string): Promise<Incident[]> {
-  const sixtyDaysAgo = new Date();
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const fromDate = sixtyDaysAgo.toISOString().split('T')[0];
 
   const allIncidents: Incident[] = [];
