@@ -31,16 +31,23 @@ Deno.serve(async (req) => {
 
     const gdeltUrl = `https://api.gdeltproject.org/api/v2/doc/doc?${params}`;
     const res = await fetch(gdeltUrl);
+    const text = await res.text();
 
     if (!res.ok) {
-      const text = await res.text();
       return new Response(JSON.stringify({ error: text }), {
         status: res.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const data = await res.json();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return new Response(JSON.stringify({ articles: [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
